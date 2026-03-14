@@ -12,3 +12,5 @@ chromadb
 pypdf
 canvasapi
 python-multipart
+vertexai
+google-cloud-aiplatform
