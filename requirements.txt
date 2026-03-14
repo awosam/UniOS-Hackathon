@@ -1,0 +1,14 @@
+langchain
+langchain-community
+langchain-google-genai
+langgraph
+fastapi
+uvicorn
+python-dotenv
+requests
+pydantic
+pydantic-settings
+chromadb
+pypdf
+canvasapi
+python-multipart
