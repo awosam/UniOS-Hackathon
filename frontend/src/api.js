@@ -2,7 +2,7 @@ import axios from 'axios'; // HTTP client for API requests
 
 // Create a pre-configured axios instance with a base URL
 const api = axios.create({
-  baseURL: '/api', // Proxied to localhost:8000 in vite.config.js
+  baseURL: 'http://localhost:8000', // Point directly to the backend
 });
 
 // --- API Service Endpoints ---

@@ -386,9 +386,105 @@ async def get_important_dates_async() -> Any:
     return await _aget("/ImportantDates")
 
 
+async def get_academic_orgs_async() -> Any:
+    """Returns all academic organizations (faculties, departments)."""
+    return await _aget("/AcademicOrganizations")
+
+
+async def get_academic_org_async(code: str) -> Any:
+    """Returns a specific academic organization by its code (e.g. 'MAT', 'ART')."""
+    return await _aget(f"/AcademicOrganizations/{code.upper()}")
+
+
+async def get_class_schedules_async(subject: str, catalog: str, term: Optional[str] = None) -> Any:
+    """Returns class schedule (section times, rooms, instructors) for a specific course."""
+    tc = term or _current_term_code()
+    return await _aget(f"/ClassSchedules/{tc}/{subject.upper()}/{catalog}")
+
+
+async def get_subjects_by_org_async(org_code: str) -> Any:
+    """Returns all subjects (e.g. CS, MATH, STAT) associated with an academic organization."""
+    return await _aget(f"/Subjects/associatedto/{org_code.upper()}")
+
+
+async def get_current_term_async() -> Any:
+    """Returns the current term data."""
+    return await _aget("/Terms/current")
+
+
+# ── TOOL CATALOG ─────────────────────────────────────────────────────────────
+# Gemini reads this catalog to contextually decide which API(s) to call.
+# Each entry has: description (for the AI), fn (callable), params (what to extract).
+
+TOOL_CATALOG = {
+    "courses": {
+        "description": "Get a list of courses offered in a subject (e.g. CS, MATH, BIOL, SOC) for a term. Use when asking about courses in a department or subject area.",
+        "params": ["subject", "term_code"],
+    },
+    "course_detail": {
+        "description": "Get detailed info about ONE specific course by subject and catalog number (e.g. CS 246, BIOL 130). Use when asking about a specific course.",
+        "params": ["subject", "catalog_number", "term_code"],
+    },
+    "class_schedule": {
+        "description": "Get the class schedule (section times, rooms, instructors) for a specific course. Use when asking about when/where a class meets.",
+        "params": ["subject", "catalog_number", "term_code"],
+    },
+    "subjects": {
+        "description": "Get the full list of all subject codes and their names (e.g. CS = Computer Science). Use when someone asks what subjects exist or what a code means.",
+        "params": [],
+    },
+    "subjects_by_org": {
+        "description": "Get all subjects that belong to an academic organization/faculty (e.g. all subjects under the Math faculty, or all Arts subjects). Use when asking about what a faculty offers.",
+        "params": ["org_code"],
+    },
+    "academic_orgs": {
+        "description": "Get all academic organizations (faculties, departments) at UWaterloo. Use when someone asks about faculties, departments, or organizational structure.",
+        "params": [],
+    },
+    "academic_org_detail": {
+        "description": "Get details about a specific academic organization by its code (e.g. MAT for Math faculty, ART for Arts). Use when asking about a specific faculty or department.",
+        "params": ["org_code"],
+    },
+    "exams": {
+        "description": "Get the exam schedule for a term. Use when asking about final exams, exam dates, or exam locations.",
+        "params": ["term_code"],
+    },
+    "terms": {
+        "description": "Get academic term dates (start, end, registration deadlines). Use when asking about term dates, when a semester starts/ends, or academic calendar.",
+        "params": [],
+    },
+    "current_term": {
+        "description": "Get the current active term info. Use when asking what term it currently is.",
+        "params": [],
+    },
+    "important_dates": {
+        "description": "Get important academic dates (add/drop deadlines, fee deadlines, convocation). Use when asking about deadlines or key academic dates.",
+        "params": [],
+    },
+    "locations": {
+        "description": "Search for campus buildings and rooms by name. Use when asking where a building is or about campus locations.",
+        "params": ["query"],
+    },
+    "food": {
+        "description": "Get campus food service outlets and their status. Use when asking about food, restaurants, cafeterias, or dining on campus.",
+        "params": [],
+    },
+    "holidays": {
+        "description": "Get university paid holidays (campus closure dates). Use when asking about holidays or when campus is closed.",
+        "params": [],
+    },
+    "news": {
+        "description": "Get the latest UWaterloo news articles. Use when asking about campus news or recent announcements.",
+        "params": [],
+    },
+    "events": {
+        "description": "Get upcoming UWaterloo campus events. Use when asking about events, workshops, or what's happening on campus.",
+        "params": [],
+    },
+}
+
+
 # ── Backwards-compatibility aliases ──────────────────────────────────────────
-# Some older modules used the "get_waterloo_*" naming convention.
-# These aliases let old code keep working without changes.
 get_waterloo_courses         = get_courses
 get_waterloo_terms           = get_terms
 get_waterloo_subjects        = get_subjects

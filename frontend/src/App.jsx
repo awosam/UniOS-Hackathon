@@ -6,6 +6,7 @@ import {
   Activity, ArrowRight, ShieldCheck, Sparkles 
 } from 'lucide-react'; // Icon library
 import * as api from './api'; // Import our API utility layer
+import ReactMarkdown from 'react-markdown';
 
 const App = () => {
   const [messages, setMessages] = useState([
@@ -61,12 +62,12 @@ const App = () => {
   };
 
   const renderMessageContent = (msg) => {
-    if (!msg.data) return <p>{msg.text}</p>;
+    if (!msg.data) return <div className="markdown-wrapper"><ReactMarkdown>{msg.text}</ReactMarkdown></div>;
 
     if (msg.dataType === 'pathfinder') {
       return (
         <div>
-          <p style={{ marginBottom: '12px' }}>{msg.text}</p>
+          <div className="markdown-wrapper" style={{ marginBottom: '12px' }}><ReactMarkdown>{msg.text}</ReactMarkdown></div>
           <div style={{ background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '12px', border: '1px solid var(--border-light)' }}>
             {msg.data.map((step, i) => (
               <div key={i} style={{ display: 'flex', gap: '10px', marginBottom: '8px' }}>
@@ -82,7 +83,7 @@ const App = () => {
     if (msg.dataType === 'drafter') {
       return (
         <div>
-          <p style={{ marginBottom: '12px' }}>{msg.text}</p>
+          <div className="markdown-wrapper" style={{ marginBottom: '12px' }}><ReactMarkdown>{msg.text}</ReactMarkdown></div>
           <pre style={{ 
             whiteSpace: 'pre-wrap', 
             background: 'rgba(0,0,0,0.2)', 
@@ -98,8 +99,9 @@ const App = () => {
       );
     }
 
-    return <p>{msg.text}</p>;
+    return <div className="markdown-wrapper"><ReactMarkdown>{msg.text}</ReactMarkdown></div>;
   };
+
 
   return (
     <div className="dashboard-container">
