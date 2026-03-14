@@ -33,20 +33,33 @@ from backend.tools.waterloo_api import (
     get_courses_async,
     get_course_detail_async,
     get_class_schedules_async,
+    get_scheduled_courses_async,
     get_subjects_async,
+    get_subject_by_code_async,
     get_subjects_by_org_async,
     get_academic_orgs_async,
     get_academic_org_async,
     get_exams_async,
     get_terms_async,
+    get_term_by_code_async,
     get_current_term_async,
     get_important_dates_async,
+    get_important_dates_by_year_async,
     get_locations_async,
+    get_location_by_code_async,
     get_food_async,
+    get_food_franchises_async,
+    get_food_outlet_by_name_async,
+    get_food_franchise_by_name_async,
     get_holidays_async,
+    get_holidays_by_year_async,
     get_news_async,
     get_events_async,
     get_posts_async,
+    get_wcms_sites_async,
+    get_wcms_site_events_async,
+    get_wcms_site_posts_async,
+    get_wcms_site_news_async,
 )
 
 _executor = ThreadPoolExecutor(max_workers=8)
@@ -123,23 +136,48 @@ async def _execute_tools(tool_selections: List[Dict]) -> List[Tuple[str, Any]]:
     """
     # Map tool names to their async functions
     _TOOL_FNS = {
+        # Courses
         "courses": lambda p: get_courses_async(p.get("subject", "CS"), p.get("term_code")),
         "course_detail": lambda p: get_course_detail_async(p.get("subject", "CS"), p.get("catalog_number", "100"), p.get("term_code")),
+        # Class Schedules
         "class_schedule": lambda p: get_class_schedules_async(p.get("subject", "CS"), p.get("catalog_number", "100"), p.get("term_code")),
+        "scheduled_courses": lambda p: get_scheduled_courses_async(p.get("term_code")),
+        # Subjects
         "subjects": lambda p: get_subjects_async(),
+        "subject_detail": lambda p: get_subject_by_code_async(p.get("subject_code", "CS")),
         "subjects_by_org": lambda p: get_subjects_by_org_async(p.get("org_code", "MAT")),
+        # Academic Organizations
         "academic_orgs": lambda p: get_academic_orgs_async(),
         "academic_org_detail": lambda p: get_academic_org_async(p.get("org_code", "MAT")),
+        # Exams
         "exams": lambda p: get_exams_async(p.get("term_code")),
+        # Terms
         "terms": lambda p: get_terms_async(),
         "current_term": lambda p: get_current_term_async(),
+        "term_detail": lambda p: get_term_by_code_async(p.get("term_code", "1251")),
+        # Important Dates
         "important_dates": lambda p: get_important_dates_async(),
+        "important_dates_by_year": lambda p: get_important_dates_by_year_async(p.get("year", "2026")),
+        # Locations
         "locations": lambda p: get_locations_async(p.get("query")),
+        "location_by_code": lambda p: get_location_by_code_async(p.get("location_code", "DC")),
+        # Food
         "food": lambda p: get_food_async(),
+        "food_by_name": lambda p: get_food_outlet_by_name_async(p.get("outlet_name", "")),
+        "food_franchises": lambda p: get_food_franchises_async(),
+        "food_franchise_by_name": lambda p: get_food_franchise_by_name_async(p.get("franchise_name", "")),
+        # Holidays
         "holidays": lambda p: get_holidays_async(),
+        "holidays_by_year": lambda p: get_holidays_by_year_async(p.get("year", "2026")),
+        # WCMS (all sites)
         "news": lambda p: get_news_async(8),
         "events": lambda p: get_events_async(12),
         "posts": lambda p: get_posts_async(12),
+        # WCMS (site-specific)
+        "wcms_sites": lambda p: get_wcms_sites_async(),
+        "site_events": lambda p: get_wcms_site_events_async(p.get("site_id", "")),
+        "site_posts": lambda p: get_wcms_site_posts_async(p.get("site_id", "")),
+        "site_news": lambda p: get_wcms_site_news_async(p.get("site_id", "")),
     }
 
     async def _call_one(tool: Dict) -> Tuple[str, Any]:

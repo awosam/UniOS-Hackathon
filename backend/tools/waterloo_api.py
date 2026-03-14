@@ -422,11 +422,73 @@ async def get_current_term_async() -> Any:
     return await _aget("/Terms/current")
 
 
+async def get_term_by_code_async(code: str) -> Any:
+    """Returns term data for a specific term code (e.g. '1265')."""
+    return await _aget(f"/Terms/{code}")
+
+
+async def get_subject_by_code_async(code: str) -> Any:
+    """Returns subject data for a specific subject code (e.g. 'CS', 'SOC')."""
+    return await _aget(f"/Subjects/{code.upper()}")
+
+
+async def get_food_franchises_async() -> Any:
+    """Returns all food service franchise data (Tim Hortons, etc.)."""
+    return await _aget("/FoodServices/franchises")
+
+
+async def get_food_outlet_by_name_async(name: str) -> Any:
+    """Returns a specific food outlet by name."""
+    return await _aget(f"/FoodServices/outlets/{name}")
+
+
+async def get_food_franchise_by_name_async(name: str) -> Any:
+    """Returns a specific food franchise by name."""
+    return await _aget(f"/FoodServices/franchises/{name}")
+
+
+async def get_location_by_code_async(code: str) -> Any:
+    """Returns a specific campus building by its location code (e.g. 'DC', 'MC')."""
+    return await _aget(f"/Locations/{code.upper()}")
+
+
+async def get_holidays_by_year_async(year: str) -> Any:
+    """Returns paid holidays for a specific year."""
+    return await _aget(f"/HolidayDates/paidholidays/{year}")
+
+
+async def get_important_dates_by_year_async(year: str) -> Any:
+    """Returns important academic dates for a specific academic year."""
+    return await _aget(f"/ImportantDates/{year}")
+
+
+async def get_scheduled_courses_async(term: Optional[str] = None) -> Any:
+    """Returns all course IDs with active schedules in a given term."""
+    tc = term or _current_term_code()
+    return await _aget(f"/ClassSchedules/{tc}")
+
+
+async def get_wcms_site_events_async(site_id: str, n: int = 10) -> Any:
+    """Returns events from a specific WCMS site by site ID."""
+    return await _aget(f"/Wcms/{site_id}/events")
+
+
+async def get_wcms_site_posts_async(site_id: str, n: int = 10) -> Any:
+    """Returns blog posts from a specific WCMS site by site ID."""
+    return await _aget(f"/Wcms/{site_id}/posts")
+
+
+async def get_wcms_site_news_async(site_id: str, n: int = 10) -> Any:
+    """Returns news from a specific WCMS site by site ID."""
+    return await _aget(f"/Wcms/{site_id}/news")
+
+
 # ── TOOL CATALOG ─────────────────────────────────────────────────────────────
 # Gemini reads this catalog to contextually decide which API(s) to call.
 # Each entry has: description (for the AI), fn (callable), params (what to extract).
 
 TOOL_CATALOG = {
+    # ── Courses ──────────────────────────────────────────────────────────────
     "courses": {
         "description": "Get a list of courses offered in a subject (e.g. CS, MATH, BIOL, SOC) for a term. Use when asking about courses in a department or subject area.",
         "params": ["subject", "term_code"],
@@ -435,30 +497,43 @@ TOOL_CATALOG = {
         "description": "Get detailed info about ONE specific course by subject and catalog number (e.g. CS 246, BIOL 130). Use when asking about a specific course.",
         "params": ["subject", "catalog_number", "term_code"],
     },
+    # ── Class Schedules ───────────────────────────────────────────────────────
     "class_schedule": {
         "description": "Get the class schedule (section times, rooms, instructors) for a specific course. Use when asking about when/where a class meets.",
         "params": ["subject", "catalog_number", "term_code"],
     },
+    "scheduled_courses": {
+        "description": "Get all course IDs that have active class schedules in a term. Use when asking what courses are currently being scheduled or offered this term.",
+        "params": ["term_code"],
+    },
+    # ── Subjects ──────────────────────────────────────────────────────────────
     "subjects": {
         "description": "Get the full list of all subject codes and their names (e.g. CS = Computer Science). Use when someone asks what subjects exist or what a code means.",
         "params": [],
+    },
+    "subject_detail": {
+        "description": "Get info about a specific subject by its code (e.g. 'CS', 'SOC', 'KIN'). Use when asking what a specific subject code means or represents.",
+        "params": ["subject_code"],
     },
     "subjects_by_org": {
         "description": "Get all subjects that belong to an academic organization/faculty (e.g. all subjects under the Math faculty, or all Arts subjects). Use when asking about what a faculty offers.",
         "params": ["org_code"],
     },
+    # ── Academic Organizations ────────────────────────────────────────────────
     "academic_orgs": {
         "description": "Get all academic organizations (faculties, departments) at UWaterloo. Use when someone asks about faculties, departments, or organizational structure.",
         "params": [],
     },
     "academic_org_detail": {
-        "description": "Get details about a specific academic organization by its code (e.g. MAT for Math faculty, ART for Arts). Use when asking about a specific faculty or department.",
+        "description": "Get details about a specific academic organization by its code (e.g. MAT for Math faculty, ART for Arts, ENG for Engineering, AHS for Applied Health Sciences). Use when asking about a specific faculty or department.",
         "params": ["org_code"],
     },
+    # ── Exams ─────────────────────────────────────────────────────────────────
     "exams": {
         "description": "Get the exam schedule for a term. Use when asking about final exams, exam dates, or exam locations.",
         "params": ["term_code"],
     },
+    # ── Terms ─────────────────────────────────────────────────────────────────
     "terms": {
         "description": "Get academic term dates (start, end, registration deadlines). Use when asking about term dates, when a semester starts/ends, or academic calendar.",
         "params": [],
@@ -467,32 +542,82 @@ TOOL_CATALOG = {
         "description": "Get the current active term info. Use when asking what term it currently is.",
         "params": [],
     },
+    "term_detail": {
+        "description": "Get details for a specific term by its code (e.g. '1265' for Spring 2026). Use when asking about a particular semester by its code.",
+        "params": ["term_code"],
+    },
+    # ── Important Dates ───────────────────────────────────────────────────────
     "important_dates": {
-        "description": "Get important academic dates (add/drop deadlines, fee deadlines, convocation). Use when asking about deadlines or key academic dates.",
+        "description": "Get important academic dates (add/drop deadlines, fee deadlines, convocation) for the current period. Use when asking about deadlines or key academic dates.",
         "params": [],
     },
+    "important_dates_by_year": {
+        "description": "Get important academic dates for a specific academic year. Use when someone asks about deadlines or key dates for a particular year (e.g. '2026').",
+        "params": ["year"],
+    },
+    # ── Locations ─────────────────────────────────────────────────────────────
     "locations": {
-        "description": "Search for campus buildings and rooms by name. Use when asking where a building is or about campus locations.",
+        "description": "Search for campus buildings and rooms by name. Use when asking where a building is or about campus locations by name (e.g. 'Davis Centre', 'Math').",
         "params": ["query"],
     },
+    "location_by_code": {
+        "description": "Get a specific campus building by its exact building code (e.g. 'DC' for Davis Centre, 'MC' for Math Computer, 'STC' for Science). Use when you know the exact building code.",
+        "params": ["location_code"],
+    },
+    # ── Food Services ─────────────────────────────────────────────────────────
     "food": {
-        "description": "Get campus food service outlets and their status. Use when asking about food, restaurants, cafeterias, or dining on campus.",
+        "description": "Get all campus food service outlets and their current status. Use when asking about food, restaurants, cafeterias, or dining on campus in general.",
         "params": [],
     },
+    "food_by_name": {
+        "description": "Get a specific campus food outlet by its name (e.g. 'Tim Hortons', 'Subway'). Use when asking about a specific restaurant or outlet on campus.",
+        "params": ["outlet_name"],
+    },
+    "food_franchises": {
+        "description": "Get all food service franchise chains on campus (e.g. Tim Hortons, Starbucks, Subway). Use when asking about chain restaurants or franchises on campus.",
+        "params": [],
+    },
+    "food_franchise_by_name": {
+        "description": "Get details about a specific food franchise chain by name. Use when asking about a specific chain restaurant like 'Tim Hortons' or 'Starbucks'.",
+        "params": ["franchise_name"],
+    },
+    # ── Holidays ──────────────────────────────────────────────────────────────
     "holidays": {
-        "description": "Get university paid holidays (campus closure dates). Use when asking about holidays or when campus is closed.",
+        "description": "Get all university paid holidays (campus closure dates). Use when asking about holidays or when campus is closed.",
         "params": [],
     },
+    "holidays_by_year": {
+        "description": "Get paid holidays for a specific year. Use when asking about holidays in a particular year (e.g. 'holidays in 2026').",
+        "params": ["year"],
+    },
+    # ── WCMS News / Events / Posts (all sites) ────────────────────────────────
     "news": {
-        "description": "Get the latest UWaterloo news articles from the WCMS. Use when asking about campus news, announcements, or recent happenings.",
+        "description": "Get the latest UWaterloo news articles from all WCMS sites. Use when asking about campus news, announcements, or recent happenings.",
         "params": [],
     },
     "events": {
-        "description": "Get upcoming UWaterloo campus events from the WCMS. Use when asking about events, workshops, clubs, activities, social gatherings, or what's happening on campus. Also use to find event recommendations for the student based on their interests.",
+        "description": "Get upcoming events from all UWaterloo WCMS sites. Use when asking about events, workshops, clubs, activities, social gatherings, or what's happening on campus. Also use proactively when the student has interests that might match events.",
         "params": [],
     },
     "posts": {
-        "description": "Get the latest blog posts from all UWaterloo WCMS sites. Use when asking about blog posts, student life stories, research highlights, or campus community content. Good for surfacing interest-relevant social content.",
+        "description": "Get the latest blog posts from all UWaterloo WCMS sites. Use when asking about blog posts, student life stories, research highlights, or campus community content. Good for interest-based social recommendations.",
+        "params": [],
+    },
+    # ── WCMS Site-Specific (by department/faculty site) ───────────────────────
+    "site_events": {
+        "description": "Get events from a specific UWaterloo department/faculty WCMS site by its site ID. Use when asking about events from a specific department or faculty (e.g. Math faculty events, CS department events).",
+        "params": ["site_id"],
+    },
+    "site_posts": {
+        "description": "Get blog posts from a specific UWaterloo department/faculty WCMS site by site ID. Use when asking about news or posts from a specific department.",
+        "params": ["site_id"],
+    },
+    "site_news": {
+        "description": "Get news from a specific UWaterloo department/faculty WCMS site by site ID. Use when asking about news from a specific department or faculty.",
+        "params": ["site_id"],
+    },
+    "wcms_sites": {
+        "description": "Get all active UWaterloo WCMS department/faculty sites and their IDs. Use this FIRST if you need a site ID before calling site_events, site_posts, or site_news.",
         "params": [],
     },
 }
