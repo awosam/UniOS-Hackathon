@@ -366,8 +366,18 @@ async def get_news_async(n: int = 6) -> Any:
     return await _aget(f"/Wcms/latestnews/{n}")
 
 
-async def get_events_async(n: int = 6) -> Any:
+async def get_events_async(n: int = 8) -> Any:
     return await _aget(f"/Wcms/latestevents/{n}")
+
+
+async def get_posts_async(n: int = 8) -> Any:
+    """Returns the n most recent blog posts from all UW WCMS sites."""
+    return await _aget(f"/Wcms/latestposts/{n}")
+
+
+async def get_wcms_sites_async() -> Any:
+    """Returns all active and published WCMS sites."""
+    return await _aget("/Wcms")
 
 
 async def get_course_detail_async(subject: str, catalog: str, term: Optional[str] = None) -> Any:
@@ -474,11 +484,15 @@ TOOL_CATALOG = {
         "params": [],
     },
     "news": {
-        "description": "Get the latest UWaterloo news articles. Use when asking about campus news or recent announcements.",
+        "description": "Get the latest UWaterloo news articles from the WCMS. Use when asking about campus news, announcements, or recent happenings.",
         "params": [],
     },
     "events": {
-        "description": "Get upcoming UWaterloo campus events. Use when asking about events, workshops, or what's happening on campus.",
+        "description": "Get upcoming UWaterloo campus events from the WCMS. Use when asking about events, workshops, clubs, activities, social gatherings, or what's happening on campus. Also use to find event recommendations for the student based on their interests.",
+        "params": [],
+    },
+    "posts": {
+        "description": "Get the latest blog posts from all UWaterloo WCMS sites. Use when asking about blog posts, student life stories, research highlights, or campus community content. Good for surfacing interest-relevant social content.",
         "params": [],
     },
 }

@@ -57,8 +57,9 @@ class MemoryEngine:
         """
         self.memory = {
             "profile": {"name": "Student", "major": "Unknown", "year": "Unknown"},
-            "milestones": [], 
-            "struggles": []
+            "milestones": [],
+            "struggles": [],
+            "interests": [],   # Hobbies and interests for personalized event matching
         }
         if os.path.exists(self.file_path):
             os.remove(self.file_path)
@@ -79,8 +80,9 @@ class MemoryEngine:
         # First-run default — blank slate for a new student
         return {
             "profile": {"name": "Student", "major": "Unknown", "year": "Unknown"},
-            "milestones": [], 
-            "struggles": []
+            "milestones": [],
+            "struggles": [],
+            "interests": [],
         }
 
     def save_milestone(self, description: str):
@@ -101,13 +103,29 @@ class MemoryEngine:
     def add_struggle(self, area: str, detail: str):
         """
         Records a subject area or concept the student finds difficult.
-
-        This context makes the AI proactively supportive — e.g. if a student
-        mentions struggling with eigenvalues, the AI remembers this for future
-        MATH questions and offers extra encouragement.
         """
         self.memory["struggles"].append({"area": area, "detail": detail})
         self._persist()
+
+    def add_interest(self, topic: str):
+        """
+        Records a hobby or interest mentioned by the student.
+        Used for personalized WCMS event and blog post recommendations.
+
+        Example: student says "I love chess" → add_interest("chess")
+        Later, WCMS events about chess are surfaced proactively.
+        """
+        topic_clean = topic.strip().lower()
+        # Avoid duplicates
+        existing = [i.lower() for i in self.memory.get("interests", [])]
+        if topic_clean and topic_clean not in existing:
+            self.memory.setdefault("interests", []).append(topic.strip())
+            self._persist()
+
+    def get_interests(self) -> list:
+        """Returns the student's stored list of interests/hobbies."""
+        self.memory = self._load_memory()
+        return self.memory.get("interests", [])
 
     def learn_personal_info(self, updates: Dict[str, str]):
         """
@@ -135,14 +153,15 @@ class MemoryEngine:
         summary += "Recent context:\n"
 
         if self.memory["milestones"]:
-            # Take the 3 most recent milestones
             recent = [m["content"] for m in self.memory["milestones"][-3:]]
             summary += f"- Recent achievements: {', '.join(recent)}\n"
 
         if self.memory["struggles"]:
-            # Take the 3 most recent struggle areas
             recent = [s["area"] for s in self.memory["struggles"][-3:]]
             summary += f"- Known struggles: {', '.join(recent)}\n"
+
+        if self.memory.get("interests"):
+            summary += f"- Interests/hobbies: {', '.join(self.memory['interests'])}\n"
 
         return summary
 

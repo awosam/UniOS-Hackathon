@@ -46,6 +46,7 @@ from backend.tools.waterloo_api import (
     get_holidays_async,
     get_news_async,
     get_events_async,
+    get_posts_async,
 )
 
 _executor = ThreadPoolExecutor(max_workers=8)
@@ -137,7 +138,8 @@ async def _execute_tools(tool_selections: List[Dict]) -> List[Tuple[str, Any]]:
         "food": lambda p: get_food_async(),
         "holidays": lambda p: get_holidays_async(),
         "news": lambda p: get_news_async(8),
-        "events": lambda p: get_events_async(8),
+        "events": lambda p: get_events_async(12),
+        "posts": lambda p: get_posts_async(12),
     }
 
     async def _call_one(tool: Dict) -> Tuple[str, Any]:
@@ -169,6 +171,7 @@ class ChatAgent:
 
     async def get_response(self, user_input: str) -> Dict:
         memory_ctx = memory_engine.get_context_summary() if hasattr(memory_engine, "get_context_summary") else "No history yet."
+        # Run memory janitor and proactive recommender in background
         asyncio.create_task(self._update_memory_background(user_input))
 
         try:
@@ -199,11 +202,23 @@ class ChatAgent:
 
                 # Step 3: Let Gemini synthesize the data into a response
                 response = await self._format_response(user_input, combined_data, tool_labels, memory_ctx)
+
+                # Step 4: Proactively recommend WCMS content if user has interests
+                recommendation = await self._check_wcms_for_interests()
+                if recommendation:
+                    response["text"] += f"\n\n💡 **You might like:** {recommendation}"
+
                 return self._append_trace(response, trace_log)
 
             # Fallback: no API needed, answer directly
             trace_log["data_sources"] = ["none (direct AI)"]
             response = await self._answer_directly(user_input, memory_ctx)
+
+            # Also check interests for direct responses
+            recommendation = await self._check_wcms_for_interests()
+            if recommendation:
+                response["text"] += f"\n\n💡 **You might like:** {recommendation}"
+
             return self._append_trace(response, trace_log)
 
         except Exception as e:
@@ -249,7 +264,7 @@ Answer helpfully. If you don't have specific UW data, say so and suggest where t
 
     async def _update_memory_background(self, user_input: str):
         """
-        The 'Memory Janitor' — extracts personal details from conversation.
+        The 'Memory Janitor' — extracts personal details AND interests from conversation.
         Runs in the background so it doesn't affect chat latency.
         """
         prompt = f"""Extract any new student personal information from this message.
@@ -261,11 +276,14 @@ Look for:
 3. Year (e.g. "I'm a 1st year")
 4. Milestone (e.g. "I just passed BIOL 130")
 5. Struggle (e.g. "I'm failing calculus")
+6. Interests/hobbies (e.g. "I love chess", "I play soccer", "I'm into photography")
+   - Extract each interest as a SHORT word or phrase (e.g. "chess", "soccer", "photography")
+   - Only include genuine hobbies/interests, not academic subjects
 
-Return ONLY a JSON object with these keys: "name", "major", "year", "milestone", "struggle".
-Use "null" for any fields not found OR if the information is too vague to be an update.
-DO NOT return "Unknown" or generic names like "Student".
-Example: {{"name": "Alice", "major": "Software Engineering", "year": "2A", "milestone": "Passed CS 135", "struggle": null}}"""
+Return ONLY a JSON object with these keys: "name", "major", "year", "milestone", "struggle", "interests".
+For "interests", return a list of strings (e.g. ["chess", "hiking"]) or an empty list [].
+Use "null" for scalar fields not found.
+Example: {{"name": "Alice", "major": "Software Engineering", "year": "2A", "milestone": null, "struggle": null, "interests": ["chess", "hiking"]}}"""
 
         result = await self._ai(prompt)
         if not result:
@@ -290,7 +308,66 @@ Example: {{"name": "Alice", "major": "Software Engineering", "year": "2A", "mile
             if data.get("struggle") and data["struggle"] != "null":
                 memory_engine.add_struggle("General", data["struggle"])
 
+            # Store interests/hobbies for WCMS personalized recommendations
+            for interest in (data.get("interests") or []):
+                if interest and str(interest).lower() not in ["null", "none", ""]:
+                    memory_engine.add_interest(interest)
+
         except Exception as e:
             print(f"[MemoryJanitor] Failed to extract info: {e}")
+
+    async def _check_wcms_for_interests(self) -> Optional[str]:
+        """
+        Proactive WCMS Recommender — runs after every response.
+        Fetches the latest events and blog posts, then asks Gemini if any
+        of them match the student's stored interests.
+        Returns a short 1-sentence recommendation string, or None.
+        """
+        interests = memory_engine.get_interests()
+        if not interests:
+            return None  # No interests stored yet — skip
+
+        try:
+            # Fetch events and posts in parallel
+            events_data, posts_data = await asyncio.gather(
+                get_events_async(12),
+                get_posts_async(12),
+            )
+
+            # Summarize for the AI (keep it short)
+            def _summarize(items, key_field="title", date_field=None):
+                if not isinstance(items, list):
+                    return "(unavailable)"
+                lines = []
+                for item in items[:10]:
+                    title = item.get(key_field, item.get("name", ""))
+                    date = item.get(date_field, "") if date_field else ""
+                    lines.append(f"- {title}" + (f" ({date[:10]})" if date else ""))
+                return "\n".join(lines) if lines else "(none)"
+
+            events_str = _summarize(events_data, "title", "startDate")
+            posts_str = _summarize(posts_data, "title", "postedDate")
+
+            prompt = f"""The student's known interests are: {', '.join(interests)}.
+
+Upcoming UWaterloo events:
+{events_str}
+
+Recent UWaterloo blog posts:
+{posts_str}
+
+Do any of these events or posts relate to the student's interests?
+- If YES: return ONE short, friendly sentence recommending the most relevant one. Example: "There's an upcoming Chess Club tournament on March 20th — you might enjoy it!"
+- If NO match exists: return exactly the word NONE.
+
+Return ONLY the sentence or NONE."""
+
+            result = await self._ai(prompt)
+            if result and result.strip().upper() != "NONE" and len(result.strip()) > 5:
+                return result.strip()
+        except Exception as e:
+            print(f"[WCMS Recommender] Error: {e}")
+
+        return None
 
 chat_agent = ChatAgent()
