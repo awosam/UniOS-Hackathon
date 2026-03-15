@@ -10,6 +10,9 @@ const api = axios.create({
 // Fetches upcoming student assignments from Canvas LMS
 export const getAssignments = () => api.get('/assignments');
 
+// Fetches upcoming campus events/programs from UWaterloo WCMS
+export const getEvents = () => api.get('/events');
+
 // Generates a strategic academic roadmap using AI (LangGraph)
 export const generatePlan = (goal, record) => api.post('/generate-plan', { goal, student_record: record });
 

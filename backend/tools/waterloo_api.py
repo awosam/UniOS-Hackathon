@@ -34,11 +34,14 @@ API KEY:
 """
 
 import asyncio                          # For async await and gather
+import json
 import os                               # To read WATERLOO_API_KEY from environment
+import re
 from concurrent.futures import ThreadPoolExecutor  # Runs sync requests.get off the event loop
 from datetime import datetime, timezone  # For comparing term start dates to today
 from functools import lru_cache         # Caches _current_term_code() — called frequently
 from typing import Any, Dict, List, Optional  # Type hints
+from urllib.parse import quote
 
 import requests                         # Standard HTTP library (sync)
 from dotenv import load_dotenv          # Reads .env file into os.environ
@@ -65,6 +68,13 @@ _executor = ThreadPoolExecutor(max_workers=10)
 BASE = "https://openapi.data.uwaterloo.ca/v3"
 
 
+def _clean_location_query(query: str) -> str:
+    """Normalize location search: remove possessives, extra spaces."""
+    query = re.sub(r"'s\b", "", query)   # "dean's" → "dean"
+    query = re.sub(r"\s+", " ", query).strip()
+    return query
+
+
 # ── Internal HTTP helpers ─────────────────────────────────────────────────────
 
 def _get(path: str, params: Optional[Dict] = None) -> Any:
@@ -87,7 +97,13 @@ def _get(path: str, params: Optional[Dict] = None) -> Any:
         r = _session.get(f"{BASE}{path}", params=params, timeout=8)
         if r.status_code == 200:
             return r.json()
-        # Include the URL in the error dict for easier debugging
+        # #region agent log
+        try:
+            _log = {"sessionId": "ab5517", "location": "waterloo_api._get", "message": "HTTP non-200", "data": {"path": path, "status_code": r.status_code}, "timestamp": __import__("time").time_ns() // 1_000_000, "hypothesisId": "B"}
+            open("/Users/apple/UniOS-Hackathon/.cursor/debug-ab5517.log", "a").write(json.dumps(_log) + "\n")
+        except Exception:
+            pass
+        # #endregion
         return {"error": f"HTTP {r.status_code}", "url": f"{BASE}{path}"}
     except Exception as e:
         return {"error": str(e)}
@@ -245,9 +261,20 @@ def get_locations(query: Optional[str] = None) -> Any:
     """
     Returns campus building/room locations.
     If query is provided, searches for a specific location by name.
+    Query is cleaned (possessives stripped) and URL-encoded before use in path.
     """
     if query:
-        return _get(f"/Locations/search/{query}")
+        cleaned = _clean_location_query(query)
+        encoded = quote(cleaned, safe="")
+        path = f"/Locations/search/{encoded}"
+        # #region agent log
+        try:
+            _log = {"sessionId": "ab5517", "location": "waterloo_api.get_locations", "message": "locations path", "data": {"query": query, "cleaned": cleaned, "encoded": encoded, "path": path}, "timestamp": __import__("time").time_ns() // 1_000_000, "hypothesisId": "A"}
+            open("/Users/apple/UniOS-Hackathon/.cursor/debug-ab5517.log", "a").write(json.dumps(_log) + "\n")
+        except Exception:
+            pass
+        # #endregion
+        return _get(path)
     return _get("/Locations")
 
 
@@ -350,7 +377,17 @@ async def get_exams_async(term: Optional[str] = None) -> Any:
 
 async def get_locations_async(query: Optional[str] = None) -> Any:
     if query:
-        return await _aget(f"/Locations/search/{query}")
+        cleaned = _clean_location_query(query)
+        encoded = quote(cleaned, safe="")
+        path = f"/Locations/search/{encoded}"
+        # #region agent log
+        try:
+            _log = {"sessionId": "ab5517", "location": "waterloo_api.get_locations_async", "message": "locations path", "data": {"query": query, "cleaned": cleaned, "encoded": encoded, "path": path}, "timestamp": __import__("time").time_ns() // 1_000_000, "hypothesisId": "A"}
+            open("/Users/apple/UniOS-Hackathon/.cursor/debug-ab5517.log", "a").write(json.dumps(_log) + "\n")
+        except Exception:
+            pass
+        # #endregion
+        return await _aget(path)
     return await _aget("/Locations")
 
 
@@ -438,13 +475,31 @@ async def get_food_franchises_async() -> Any:
 
 
 async def get_food_outlet_by_name_async(name: str) -> Any:
-    """Returns a specific food outlet by name."""
-    return await _aget(f"/FoodServices/outlets/{name}")
+    """Returns a specific food outlet by name. User input is URL-encoded for the path."""
+    encoded = quote(name, safe="")
+    path = f"/FoodServices/outlets/{encoded}"
+    # #region agent log
+    try:
+        _log = {"sessionId": "ab5517", "location": "waterloo_api.get_food_outlet_by_name_async", "message": "food outlet path", "data": {"name": name, "encoded": encoded, "path": path}, "timestamp": __import__("time").time_ns() // 1_000_000, "hypothesisId": "C"}
+        open("/Users/apple/UniOS-Hackathon/.cursor/debug-ab5517.log", "a").write(json.dumps(_log) + "\n")
+    except Exception:
+        pass
+    # #endregion
+    return await _aget(path)
 
 
 async def get_food_franchise_by_name_async(name: str) -> Any:
-    """Returns a specific food franchise by name."""
-    return await _aget(f"/FoodServices/franchises/{name}")
+    """Returns a specific food franchise by name. User input is URL-encoded for the path."""
+    encoded = quote(name, safe="")
+    path = f"/FoodServices/franchises/{encoded}"
+    # #region agent log
+    try:
+        _log = {"sessionId": "ab5517", "location": "waterloo_api.get_food_franchise_by_name_async", "message": "food franchise path", "data": {"name": name, "encoded": encoded, "path": path}, "timestamp": __import__("time").time_ns() // 1_000_000, "hypothesisId": "C"}
+        open("/Users/apple/UniOS-Hackathon/.cursor/debug-ab5517.log", "a").write(json.dumps(_log) + "\n")
+    except Exception:
+        pass
+    # #endregion
+    return await _aget(path)
 
 
 async def get_location_by_code_async(code: str) -> Any:

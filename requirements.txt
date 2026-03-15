@@ -16,4 +16,3 @@ canvasapi
 python-multipart
 vertexai
 google-cloud-aiplatform
-pytest

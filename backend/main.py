@@ -49,6 +49,7 @@ from backend.agents.sentiment import sentiment_engine          # Persona selecto
 from backend.agents.memory import memory_engine                # Persistent student context
 from backend.integrations.peer_pulse import peer_pulse        # Campus vibes aggregator
 from backend.agents.chat_agent import chat_agent               # Main AI brain / router
+from backend.tools.waterloo_api import get_events_async        # Campus events for sidebar
 
 import os      # For file path operations in the PDF upload endpoint
 import shutil  # For efficiently copying the uploaded PDF to disk
@@ -155,6 +156,21 @@ async def generate_plan(goal: str, student_record: dict):
         # .invoke() runs the entire workflow synchronously and returns the final state
         final_state = pathfinder_app.invoke(initial_state)
         return {"roadmap": final_state["roadmap"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Campus events (for sidebar) ─────────────────────────────────────────────────
+
+@app.get("/events")
+async def get_campus_events():
+    """
+    Fetches upcoming campus events/programs from UWaterloo WCMS (workshops, clubs, etc.).
+    """
+    try:
+        data = await get_events_async(10)
+        events = data if isinstance(data, list) else []
+        return {"events": events}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
