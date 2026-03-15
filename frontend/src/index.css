@@ -266,3 +266,16 @@ h1, h2, h3 {
   background: var(--border-light);
   margin: 16px 0;
 }
+
+/* Citation links — superscript style for policy and other external links */
+.markdown-wrapper .citation-link {
+  font-size: 0.75em;
+  vertical-align: super;
+  color: #185FA5;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.markdown-wrapper .citation-link:hover {
+  text-decoration: underline;
+}

@@ -80,6 +80,49 @@ def _build_catalog_prompt() -> str:
 _CATALOG_PROMPT = _build_catalog_prompt()
 
 
+# ── Policy citation helpers (inline [1]/[2] → links + sources footer) ─────────
+
+def _format_policy_context(chunks: List[Dict]) -> Tuple[str, Dict[int, Dict]]:
+    """
+    Returns (context_string, citation_map).
+    context_string: numbered chunks for the prompt.
+    citation_map: {1: {url, label}, ...}
+    """
+    context_lines = []
+    citation_map = {}
+    for i, chunk in enumerate(chunks, 1):
+        section = chunk.get("section", "")
+        subsection = chunk.get("subsection", "")
+        url = chunk.get("url", "")
+        label = f"{section} > {subsection}" if subsection else (section or "Policy")
+        context_lines.append(f"[{i}] SOURCE: {label}\n{chunk.get('text', '')}")
+        citation_map[i] = {"url": url, "label": label}
+    return "\n\n".join(context_lines), citation_map
+
+
+def _inject_citations(text: str, citation_map: Dict[int, Dict]) -> str:
+    """Replace [1], [2] with markdown links; append deduplicated sources footer. Uses negative lookahead so [1] inside [[1]](url) is not double-replaced."""
+    used_nums = sorted(set(int(m) for m in re.findall(r"\[(\d+)\]", text)))
+
+    def _replace(match):
+        n = int(match.group(1))
+        cite = citation_map.get(n)
+        if not cite:
+            return match.group(0)
+        url, label = cite["url"], cite["label"]
+        return f"[[{n}]]({url} \"{label}\")"
+
+    linked = re.sub(r"\[(\d+)\](?!\])", _replace, text)
+    if used_nums:
+        sources = ["\n\n**Sources**"]
+        for n in used_nums:
+            cite = citation_map.get(n)
+            if cite:
+                sources.append(f"**{n}.** [{cite['label']}]({cite['url']})")
+        linked += "\n".join(sources)
+    return linked
+
+
 # ── Contextual Intent Classification ─────────────────────────────────────────
 
 async def _classify_intent(user_input: str, ai_fn, memory_ctx: str = "") -> Dict:
@@ -258,11 +301,7 @@ class ChatAgent:
                     policy_chunks = []
             if policy_chunks:
                 trace_log["data_sources"] = ["policy (RAG)"]
-                policy_context = "\n\n".join(
-                    f"Source: {c.get('section', '')} > {c.get('subsection', '')} — {c.get('url', '')}\n{c.get('text', '')}"
-                    for c in policy_chunks
-                )
-                response = await self._answer_with_policy(user_input, memory_ctx, policy_context)
+                response = await self._answer_with_policy(user_input, memory_ctx, policy_chunks)
             else:
                 trace_log["data_sources"] = ["none (direct AI)"]
                 response = await self._answer_directly(user_input, memory_ctx)
@@ -328,48 +367,6 @@ Answer:"""
         raw_text = await self._ai(prompt)
         linked_text = _inject_citations(raw_text, citation_map)
         return {"type": "text", "text": linked_text, "citation_map": citation_map}
-
-
-def _format_policy_context(chunks: List[Dict]) -> Tuple[str, Dict[int, Dict]]:
-    """
-    Returns (context_string, citation_map).
-    context_string: numbered chunks for the prompt.
-    citation_map: {1: {url, label}, ...}
-    """
-    context_lines = []
-    citation_map = {}
-    for i, chunk in enumerate(chunks, 1):
-        section = chunk.get("section", "")
-        subsection = chunk.get("subsection", "")
-        url = chunk.get("url", "")
-        label = f"{section} > {subsection}" if subsection else (section or "Policy")
-        context_lines.append(f"[{i}] SOURCE: {label}\n{chunk.get('text', '')}")
-        citation_map[i] = {"url": url, "label": label}
-    return "\n\n".join(context_lines), citation_map
-
-
-def _inject_citations(text: str, citation_map: Dict[int, Dict]) -> str:
-    """Replace [1], [2] with markdown links; append deduplicated sources footer. Uses (?!\\]) so [1] inside [[1]](url) is not double-matched."""
-    used_nums = sorted(set(int(m) for m in re.findall(r"\[(\d+)\]", text)))
-
-    def _replace(match):
-        n = int(match.group(1))
-        cite = citation_map.get(n)
-        if not cite:
-            return match.group(0)
-        url, label = cite["url"], cite["label"]
-        return f"[[{n}]]({url} \"{label}\")"
-
-    linked = re.sub(r"\[(\d+)\](?!\])", _replace, text)
-    if used_nums:
-        sources = ["\n\n**Sources**"]
-        for n in used_nums:
-            cite = citation_map.get(n)
-            if cite:
-                sources.append(f"**{n}.** [{cite['label']}]({cite['url']})")
-        linked += "\n".join(sources)
-    return linked
-
 
     async def _answer_directly(self, user_input: str, memory_ctx: str) -> Dict:
         prompt = f"""You are Uni-OS, a smart and friendly University of Waterloo academic assistant.

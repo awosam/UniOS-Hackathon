@@ -8,6 +8,14 @@ import {
 import * as api from './api'; // Import our API utility layer
 import ReactMarkdown from 'react-markdown';
 
+const markdownComponents = {
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="citation-link">
+      {children}
+    </a>
+  ),
+};
+
 const App = () => {
   const [messages, setMessages] = useState([
     { type: 'bot', text: "Hello! I'm Uni-OS, your academic companion. How can I help you today? (e.g., 'Switching majors', 'Canvas deadlines', 'Draft a request')" }
@@ -62,12 +70,12 @@ const App = () => {
   };
 
   const renderMessageContent = (msg) => {
-    if (!msg.data) return <div className="markdown-wrapper"><ReactMarkdown>{msg.text}</ReactMarkdown></div>;
+    if (!msg.data) return <div className="markdown-wrapper"><ReactMarkdown components={markdownComponents}>{msg.text}</ReactMarkdown></div>;
 
     if (msg.dataType === 'pathfinder') {
       return (
         <div>
-          <div className="markdown-wrapper" style={{ marginBottom: '12px' }}><ReactMarkdown>{msg.text}</ReactMarkdown></div>
+          <div className="markdown-wrapper" style={{ marginBottom: '12px' }}><ReactMarkdown components={markdownComponents}>{msg.text}</ReactMarkdown></div>
           <div style={{ background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '12px', border: '1px solid var(--border-light)' }}>
             {msg.data.map((step, i) => (
               <div key={i} style={{ display: 'flex', gap: '10px', marginBottom: '8px' }}>
@@ -83,7 +91,7 @@ const App = () => {
     if (msg.dataType === 'drafter') {
       return (
         <div>
-          <div className="markdown-wrapper" style={{ marginBottom: '12px' }}><ReactMarkdown>{msg.text}</ReactMarkdown></div>
+          <div className="markdown-wrapper" style={{ marginBottom: '12px' }}><ReactMarkdown components={markdownComponents}>{msg.text}</ReactMarkdown></div>
           <pre style={{ 
             whiteSpace: 'pre-wrap', 
             background: 'rgba(0,0,0,0.2)', 
@@ -99,7 +107,7 @@ const App = () => {
       );
     }
 
-    return <div className="markdown-wrapper"><ReactMarkdown>{msg.text}</ReactMarkdown></div>;
+    return <div className="markdown-wrapper"><ReactMarkdown components={markdownComponents}>{msg.text}</ReactMarkdown></div>;
   };
 
 
