@@ -10,7 +10,10 @@ pydantic
 pydantic-settings
 chromadb
 pypdf
+beautifulsoup4
+httpx
 canvasapi
 python-multipart
 vertexai
 google-cloud-aiplatform
+pytest

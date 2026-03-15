@@ -26,7 +26,9 @@ from vertexai.generative_models import GenerativeModel
 from google.api_core import exceptions
 
 from backend.agents.memory import memory_engine
+from backend.agents.policy_decoder import policy_decoder
 from backend.config import settings
+from backend.tools.policy_index import search_policies as search_policies_index
 from backend.tools.waterloo_api import (
     TOOL_CATALOG,
     fetch_parallel,
@@ -209,14 +211,12 @@ class ChatAgent:
 
     async def get_response(self, user_input: str) -> Dict:
         memory_ctx = memory_engine.get_context_summary() if hasattr(memory_engine, "get_context_summary") else "No history yet."
-        # Run memory janitor and proactive recommender in background
         asyncio.create_task(self._update_memory_background(user_input))
 
         try:
             # Step 1: Let Gemini reason about which tools to call
             classification = await _classify_intent(user_input, self._ai, memory_ctx)
             intent = classification.get("intent", "GENERAL")
-
             trace_log = {
                 "memory_context": memory_ctx.replace("\n", " ").replace("Student Profile:", "").strip(),
                 "router_intent": intent,
@@ -248,9 +248,24 @@ class ChatAgent:
 
                 return self._append_trace(response, trace_log)
 
-            # Fallback: no API needed, answer directly
-            trace_log["data_sources"] = ["none (direct AI)"]
-            response = await self._answer_directly(user_input, memory_ctx)
+            # Fallback: no API needed. Try policy RAG first for policy-like questions.
+            policy_chunks = search_policies_index(user_input)
+            if not policy_chunks:
+                try:
+                    _pd_chunks = policy_decoder.query_policies(user_input)
+                    policy_chunks = [{"text": c.text, "section": getattr(c, "source", ""), "subsection": f"page {getattr(c, 'page', '')}", "url": ""} for c in _pd_chunks]
+                except Exception:
+                    policy_chunks = []
+            if policy_chunks:
+                trace_log["data_sources"] = ["policy (RAG)"]
+                policy_context = "\n\n".join(
+                    f"Source: {c.get('section', '')} > {c.get('subsection', '')} — {c.get('url', '')}\n{c.get('text', '')}"
+                    for c in policy_chunks
+                )
+                response = await self._answer_with_policy(user_input, memory_ctx, policy_context)
+            else:
+                trace_log["data_sources"] = ["none (direct AI)"]
+                response = await self._answer_directly(user_input, memory_ctx)
 
             # Also check interests for direct responses
             recommendation = await self._check_wcms_for_interests()
@@ -261,7 +276,14 @@ class ChatAgent:
 
         except Exception as e:
             print(f"[ChatAgent] Error: {e}")
-            return {"type": "text", "text": "Something went wrong while processing your request. Please try again or rephrase. [Source: Uni-OS]"}
+            err_msg = str(e)[:300]
+            help_text = (
+                "\n\n**What you can do:**\n"
+                "1. Run the policy index build once so policy questions get cited answers: "
+                "`python -m backend.scripts.build_policy_index` (or POST /scrape-policies).\n"
+                "2. If this keeps happening, check Vertex AI / Gemini configuration (project, credentials)."
+            )
+            return {"type": "text", "text": f"Something went wrong while processing your request. Please try again or rephrase.\n\n**Error:** {err_msg}{help_text}\n\n[Source: Uni-OS]"}
 
     async def _format_response(self, user_input: str, data: Dict, labels: List[str], memory_ctx: str) -> Dict:
         """Lets Gemini read the raw API data and craft a student-friendly answer."""
@@ -286,6 +308,68 @@ YOUR TASK:
 
         text = await self._ai(prompt)
         return {"type": "text", "text": text}
+
+    async def _answer_with_policy(self, user_input: str, memory_ctx: str, chunks: List[Dict]) -> Dict:
+        """Answer using retrieved UW policy excerpts; injects inline citations and sources footer."""
+        context_str, citation_map = _format_policy_context(chunks)
+        prompt = f"""You are Uni-OS, a University of Waterloo academic assistant.
+
+Student context: {memory_ctx}
+Student asked: "{user_input}"
+
+Use the policy excerpts below to answer. After EVERY sentence that uses information from a source, place its citation number in square brackets like [1] or [2]. Multiple citations on one sentence are fine: [1][2].
+Do NOT put all citations at the end — cite inline immediately after the relevant sentence.
+Do NOT make up information not in the sources.
+
+POLICY SOURCES:
+{context_str}
+
+Answer:"""
+        raw_text = await self._ai(prompt)
+        linked_text = _inject_citations(raw_text, citation_map)
+        return {"type": "text", "text": linked_text, "citation_map": citation_map}
+
+
+def _format_policy_context(chunks: List[Dict]) -> Tuple[str, Dict[int, Dict]]:
+    """
+    Returns (context_string, citation_map).
+    context_string: numbered chunks for the prompt.
+    citation_map: {1: {url, label}, ...}
+    """
+    context_lines = []
+    citation_map = {}
+    for i, chunk in enumerate(chunks, 1):
+        section = chunk.get("section", "")
+        subsection = chunk.get("subsection", "")
+        url = chunk.get("url", "")
+        label = f"{section} > {subsection}" if subsection else (section or "Policy")
+        context_lines.append(f"[{i}] SOURCE: {label}\n{chunk.get('text', '')}")
+        citation_map[i] = {"url": url, "label": label}
+    return "\n\n".join(context_lines), citation_map
+
+
+def _inject_citations(text: str, citation_map: Dict[int, Dict]) -> str:
+    """Replace [1], [2] with markdown links; append deduplicated sources footer. Uses (?!\\]) so [1] inside [[1]](url) is not double-matched."""
+    used_nums = sorted(set(int(m) for m in re.findall(r"\[(\d+)\]", text)))
+
+    def _replace(match):
+        n = int(match.group(1))
+        cite = citation_map.get(n)
+        if not cite:
+            return match.group(0)
+        url, label = cite["url"], cite["label"]
+        return f"[[{n}]]({url} \"{label}\")"
+
+    linked = re.sub(r"\[(\d+)\](?!\])", _replace, text)
+    if used_nums:
+        sources = ["\n\n**Sources**"]
+        for n in used_nums:
+            cite = citation_map.get(n)
+            if cite:
+                sources.append(f"**{n}.** [{cite['label']}]({cite['url']})")
+        linked += "\n".join(sources)
+    return linked
+
 
     async def _answer_directly(self, user_input: str, memory_ctx: str) -> Dict:
         prompt = f"""You are Uni-OS, a smart and friendly University of Waterloo academic assistant.

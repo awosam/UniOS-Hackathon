@@ -50,7 +50,8 @@ import vertexai
 from vertexai.generative_models import GenerativeModel
 from langgraph.graph import StateGraph, END  # LangGraph core: graph builder and terminal node
 
-from backend.agents.policy_decoder import policy_decoder  # RAG system for policy retrieval
+from backend.agents.policy_decoder import policy_decoder  # RAG system for policy retrieval (PDF fallback)
+from backend.tools.policy_index import search_policies as search_policies_index  # ChromaDB web-scraped policy
 from backend.vertex import VERTEX_PROJECT, VERTEX_LOCATION  # Shared GCP config
 
 # Initialize Vertex AI at module load (once per process)
@@ -87,7 +88,8 @@ class AgentState(TypedDict):
 
 def retrieve_policies(state: AgentState) -> AgentState:
     """
-    Searches the PolicyDecoder's stored chunks for text relevant to the student's goal.
+    Searches policy index (ChromaDB web-scraped) first; falls back to policy_decoder (PDF) if empty.
+    Formats chunks with subsection-level citations: "Source: Section > Subsection — URL\\ntext".
 
     WHY RETRIEVAL BEFORE GENERATION:
       Asking Gemini to generate a roadmap without grounding it in policy text
@@ -101,10 +103,17 @@ def retrieve_policies(state: AgentState) -> AgentState:
     Returns:
         Updated state with policies filled in.
     """
-    chunks = policy_decoder.query_policies(state["goal"])
+    index_chunks = search_policies_index(state["goal"], k=3)
+    if index_chunks:
+        state["policies"] = [
+            f"Source: {c['section']} > {c['subsection']} — {c['url']}\n{c['text']}"
+            for c in index_chunks
+        ]
+        return state
 
-    # Extract just the text content from the PolicyChunk objects
-    state["policies"] = [c.text for c in chunks]
+    # Fallback: PDF-based policy_decoder (no subsection/url)
+    chunks = policy_decoder.query_policies(state["goal"])
+    state["policies"] = [f"[Source: {c.source}, page {c.page}]\n{c.text}" for c in chunks]
     return state
 
 

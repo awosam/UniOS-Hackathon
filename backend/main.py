@@ -40,6 +40,8 @@ from fastapi.middleware.cors import CORSMiddleware              # Cross-origin r
 from backend.config import settings                            # App configuration
 from backend.agents.policy_decoder import policy_decoder       # RAG for UW policy PDFs
 from backend.agents.pathfinder import pathfinder_app           # LangGraph roadmap generator
+from backend.tools.policy_index import search_policies as search_policies_index  # ChromaDB policy (web-scraped)
+from backend.scripts.build_policy_index import run_build      # Phase 1: build once (scrape + embed + store)
 from backend.integrations.canvas import canvas_client          # Canvas LMS integration
 from backend.integrations.calendar import calendar_fusion      # Study plan generator
 from backend.agents.drafter import drafter_agent               # Document draft generator
@@ -191,12 +193,35 @@ async def draft_document(doc_type: str, student_context: dict, policy_query: str
     try:
         policy_text = ""
         if policy_query:
-            # Retrieve relevant policy chunks to ground the document in real rules
-            relevant_docs = policy_decoder.query_policies(policy_query)
-            policy_text = "\n".join([d.text for d in relevant_docs])
+            # Prefer ChromaDB (web-scraped) for subsection-level citations; fallback to PDF policy_decoder
+            index_chunks = search_policies_index(policy_query)
+            if index_chunks:
+                policy_text = "\n\n".join(
+                    f"Source: {c['section']} > {c['subsection']} — {c['url']}\n{c['text']}"
+                    for c in index_chunks
+                )
+            else:
+                relevant_docs = policy_decoder.query_policies(policy_query)
+                policy_text = "\n".join([d.text for d in relevant_docs])
 
         draft = drafter_agent.generate_draft(doc_type, student_context, policy_text)
         return {"draft": draft}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Policy scrape (web) ──────────────────────────────────────────────────────
+
+@app.post("/scrape-policies")
+async def scrape_policies():
+    """
+    Phase 1 build: runs the policy build script (clear, scrape 15 sections + subsections, embed, store in ChromaDB).
+    Run once; takes ~2–3 min. Same logic as python -m backend.scripts.build_policy_index.
+    """
+    try:
+        import asyncio
+        n, elapsed = await asyncio.to_thread(run_build)
+        return {"message": "Policy scrape complete", "chunks": n, "elapsed_seconds": round(elapsed, 1)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
